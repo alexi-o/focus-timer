@@ -6,7 +6,6 @@
   let workTime = defaultWorkTime;
   let breakTime = defaultBreakTime;
   let timer = workTime;
-  let interval = null;
   let isWorking = true;
   let running = false;
 
@@ -17,10 +16,11 @@
   let newBlockedPage = "";
   let darkMode = false;
 
-  const workTimeOptions = [15, 25, 30, 45];
+  const workTimeOptions = [1, 15, 25, 30, 45];
   const breakTimeOptions = [5, 10, 15];
 
   onMount(() => {
+    // Load initial settings
     chrome.storage.sync.get(
       [
         "workTime",
@@ -45,9 +45,20 @@
         updateBlockedWebsites();
       }
     );
+
+    chrome.storage.local.get(["timer", "isWorking", "running"], (result) => {
+      timer = result.timer || workTime;
+      isWorking = result.isWorking !== undefined ? result.isWorking : true;
+      running = result.running || false;
+    });
+
+    chrome.runtime.onMessage.addListener((request) => {
+      if (request.type === "timerUpdate") {
+        timer = request.timer;
+      }
+    });
   });
 
-  // Timer functions
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -57,42 +68,18 @@
   function startTimer() {
     if (!running) {
       running = true;
-      interval = setInterval(() => {
-        if (timer > 0) {
-          timer--;
-        } else {
-          notify();
-          toggleMode();
-        }
-      }, 1000);
-
-      chrome.runtime.sendMessage({ type: "timerStatus", running: true });
+      chrome.runtime.sendMessage({ type: "startTimer", time: timer });
     }
   }
 
   function stopTimer() {
     running = false;
-    clearInterval(interval);
-
-    chrome.runtime.sendMessage({ type: "timerStatus", running: false });
+    chrome.runtime.sendMessage({ type: "stopTimer" });
   }
 
   function resetTimer() {
-    stopTimer();
     timer = isWorking ? workTime : breakTime;
-  }
-
-  function toggleMode() {
-    isWorking = !isWorking;
-    timer = isWorking ? workTime : breakTime;
-    startTimer();
-  }
-
-  function notify() {
-    chrome.runtime.sendMessage({
-      type: "showNotification",
-      text: notificationMessage,
-    });
+    chrome.runtime.sendMessage({ type: "resetTimer", time: timer, isWorking });
   }
 
   function setWorkTime(minutes) {
